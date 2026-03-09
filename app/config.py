@@ -1,6 +1,9 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
+    AWS_ACCESS_KEY_ID: str
+    AWS_SECRET_ACCESS_KEY: str
+    AWS_SESSION_TOKEN: str
     DB_HOST: str
     DB_PORT: int = 3306
     DB_NAME: str
