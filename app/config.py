@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 # Se genera un objeto de tipo Settings para acceder a las variables de entorno del proyecto
 settings = Settings()
