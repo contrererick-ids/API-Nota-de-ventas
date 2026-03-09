@@ -54,7 +54,7 @@ class Nota(Base):
     cliente = relationship("Cliente", back_populates="notas")
     direccion_facturacion = relationship("Domicilio", foreign_keys=[direccion_facturacion_id])
     direccion_envio = relationship("Domicilio", foreign_keys=[direccion_envio_id])
-    contenido = relationship("ContenidoNota", back_populates="nota")
+    contenido = relationship("ContenidoNota", back_populates="nota", cascade="all, delete-orphan")
 
 
 class ContenidoNota(Base):
