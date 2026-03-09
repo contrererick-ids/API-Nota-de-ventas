@@ -13,31 +13,31 @@ def obtener_clientes(db: Session = Depends(get_db)):
     return db.query(Cliente).all()
 
 
-@router.get("/{cliente_id}", response_model=ClienteResponse)
-def obtener_cliente(cliente_id: int, db: Session = Depends(get_db)):
-    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+@router.get("/{id_cliente}", response_model=ClienteResponse)
+def obtener_cliente(id_cliente: int, db: Session = Depends(get_db)):
+    cliente = db.query(Cliente).filter(Cliente.id == id_cliente).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     return cliente
 
 
 @router.post("/", response_model=ClienteResponse)
-def crear_cliente(cliente: ClienteCreate, db: Session = Depends(get_db)):
+def crear_cliente(new_cliente: ClienteCreate, db: Session = Depends(get_db)):
     db_cliente = db.query(Cliente).filter(
-        (Cliente.rfc == cliente.rfc) | (Cliente.correo == cliente.correo)
+        (Cliente.rfc == new_cliente.rfc) | (Cliente.correo == new_cliente.correo)
     ).first()
     if db_cliente:
         raise HTTPException(status_code=400, detail="RFC o correo ya registrado")
-    nuevo_cliente = Cliente(**cliente.model_dump())
-    db.add(nuevo_cliente)
+    cliente_to_post = Cliente(**new_cliente.model_dump())
+    db.add(cliente_to_post)
     db.commit()
-    db.refresh(nuevo_cliente)
-    return nuevo_cliente
+    db.refresh(cliente_to_post)
+    return cliente_to_post
 
 
-@router.put("/{cliente_id}", response_model=ClienteResponse)
-def actualizar_cliente(cliente_id: int, cliente: ClienteCreate, db: Session = Depends(get_db)):
-    db_cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+@router.put("/{id_cliente}", response_model=ClienteResponse)
+def actualizar_cliente(id_cliente: int, cliente: ClienteCreate, db: Session = Depends(get_db)):
+    db_cliente = db.query(Cliente).filter(Cliente.id == id_cliente).first()
     if not db_cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     for key, value in cliente.model_dump().items():
@@ -47,9 +47,9 @@ def actualizar_cliente(cliente_id: int, cliente: ClienteCreate, db: Session = De
     return db_cliente
 
 
-@router.delete("/{cliente_id}")
-def eliminar_cliente(cliente_id: int, db: Session = Depends(get_db)):
-    db_cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+@router.delete("/{id_cliente}")
+def eliminar_cliente(id_cliente: int, db: Session = Depends(get_db)):
+    db_cliente = db.query(Cliente).filter(Cliente.id == id_cliente).first()
     if not db_cliente:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     db.delete(db_cliente)
