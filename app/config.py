@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     DB_NAME: str
     DB_USER: str
     DB_PASSWORD: str
+    EC2_HOST: str
     S3_BUCKET: str
     AWS_REGION: str
     SNS_TOPIC_ARN: str

@@ -1,28 +1,68 @@
 import boto3
+from datetime import datetime
 from app.config import settings
 
 s3_client = boto3.client("s3", region_name=settings.AWS_REGION)
 
-def subir_archivo(archivo_bytes: bytes, nombre_archivo: str, content_type: str) -> str:
+def subir_pdf(pdf_bytes: bytes, rfc: str, folio: str) -> str:
+    key = f"{rfc}/{folio}.pdf"
+    timestamp = datetime.utcnow().isoformat()
+
     s3_client.put_object(
         Bucket=settings.S3_BUCKET,
-        Key=nombre_archivo,
-        Body=archivo_bytes,
-        ContentType=content_type
+        Key=key,
+        Body=pdf_bytes,
+        ContentType="application/pdf",
+        Metadata={
+            "hora-envio": timestamp,
+            "nota-descargada": "false",
+            "veces-enviado": "1"
+        }
     )
-    url = f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{nombre_archivo}"
-    return url
+    return key
 
-def eliminar_archivo(nombre_archivo: str) -> None:
-    s3_client.delete_object(
+def actualizar_metadatos_envio(rfc: str, folio: str) -> None:
+    key = f"{rfc}/{folio}.pdf"
+
+    obj = s3_client.head_object(Bucket=settings.S3_BUCKET, Key=key)
+    metadata = obj["Metadata"]
+
+    veces = int(metadata.get("veces-enviado", "1")) + 1
+    timestamp = datetime.utcnow().isoformat()
+
+    s3_client.copy_object(
         Bucket=settings.S3_BUCKET,
-        Key=nombre_archivo
+        CopySource={"Bucket": settings.S3_BUCKET, "Key": key},
+        Key=key,
+        Metadata={
+            "hora-envio": timestamp,
+            "nota-descargada": metadata.get("nota-descargada", "false"),
+            "veces-enviado": str(veces)
+        },
+        MetadataDirective="REPLACE",
+        ContentType="application/pdf"
     )
 
-def obtener_url_presignada(nombre_archivo: str, expiracion: int = 3600) -> str:
-    url = s3_client.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": settings.S3_BUCKET, "Key": nombre_archivo},
-        ExpiresIn=expiracion
+def marcar_nota_descargada(rfc: str, folio: str) -> None:
+    key = f"{rfc}/{folio}.pdf"
+
+    obj = s3_client.head_object(Bucket=settings.S3_BUCKET, Key=key)
+    metadata = obj["Metadata"]
+
+    s3_client.copy_object(
+        Bucket=settings.S3_BUCKET,
+        CopySource={"Bucket": settings.S3_BUCKET, "Key": key},
+        Key=key,
+        Metadata={
+            "hora-envio": metadata.get("hora-envio", ""),
+            "nota-descargada": "true",
+            "veces-enviado": metadata.get("veces-enviado", "1")
+        },
+        MetadataDirective="REPLACE",
+        ContentType="application/pdf"
     )
-    return url
+
+def descargar_pdf(rfc: str, folio: str) -> bytes:
+    key = f"{rfc}/{folio}.pdf"
+    response = s3_client.get_object(Bucket=settings.S3_BUCKET, Key=key)
+    return response["Body"].read()

@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.models import Nota, ContenidoNota, Cliente, Domicilio
 from app.schemas.schemas import NotaCreate, NotaResponse
 from app.services.sns_service import enviar_notificacion
+from app.services.s3_service import subir_pdf, descargar_pdf, marcar_nota_descargada, actualizar_metadatos_envio
+from app.services.pdf_service import generar_pdf
+from app.config import settings
 from typing import List
 
 router = APIRouter(prefix="/notas", tags=["Notas"])
@@ -20,6 +24,22 @@ def obtener_nota(nota_id: int, db: Session = Depends(get_db)):
     if not nota:
         raise HTTPException(status_code=404, detail="Nota no encontrada")
     return nota
+
+
+@router.get("/{nota_id}/descargar")
+def descargar_nota(nota_id: int, db: Session = Depends(get_db)):
+    nota = db.query(Nota).filter(Nota.id == nota_id).first()
+    if not nota:
+        raise HTTPException(status_code=404, detail="Nota no encontrada")
+
+    pdf_bytes = descargar_pdf(nota.cliente.rfc, nota.folio)
+    marcar_nota_descargada(nota.cliente.rfc, nota.folio)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={nota.folio}.pdf"}
+    )
 
 
 @router.post("/", response_model=NotaResponse)
@@ -45,6 +65,7 @@ def crear_nota(nota: NotaCreate, db: Session = Depends(get_db)):
     if not dir_envio:
         raise HTTPException(status_code=404, detail="Dirección de envío no encontrada")
 
+    # Calcular total
     total = sum(item.cantidad * item.precio_unitario for item in nota.contenido)
 
     # Crear nota
@@ -72,15 +93,26 @@ def crear_nota(nota: NotaCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(nueva_nota)
 
-    # Notificación SNS
+    # Generar PDF y subir a S3
+    pdf_bytes = generar_pdf(cliente, nueva_nota)
+    subir_pdf(pdf_bytes, cliente.rfc, nueva_nota.folio)
+
+    # URL del endpoint de descarga
+    url_descarga = f"http://{settings.EC2_HOST}:8000/notas/{nueva_nota.id}/descargar"
+
+    # Enviar notificación SNS
     enviar_notificacion(
-        asunto=f"Nueva nota creada: {nueva_nota.folio}",
+        asunto=f"Nueva nota generada: {nueva_nota.folio}",
         mensaje=(
-            f"Se ha creado la nota {nueva_nota.folio}\n"
+            f"Se ha generado la nota {nueva_nota.folio}\n"
             f"Cliente: {cliente.razon_social}\n"
-            f"Total: ${nueva_nota.total:.2f}"
+            f"Total: ${nueva_nota.total:.2f}\n\n"
+            f"Descargue su nota en el siguiente enlace:\n{url_descarga}"
         )
     )
+
+    # Actualizar metadatos si ya existía el archivo
+    actualizar_metadatos_envio(cliente.rfc, nueva_nota.folio)
 
     return nueva_nota
 
